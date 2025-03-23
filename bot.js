@@ -39,9 +39,9 @@ bot.on('inline_query', async (ctx) => {
     const loot = getRandomLoot();
 
     if (!userRequestsCounter[ctx.update.inline_query.from.id]) {
-        userRequestsCounter[ctx.update.inline_query.from.id]=1
+        userRequestsCounter[ctx.update.inline_query.from.id] = 1
     } else {
-        userRequestsCounter[ctx.update.inline_query.from.id]+=1
+        userRequestsCounter[ctx.update.inline_query.from.id] += 1
     }
 
     const stringArray = []
@@ -49,17 +49,17 @@ bot.on('inline_query', async (ctx) => {
     stringArray.push("")
     stringArray.push(randFromArr(texts.unwind))
     stringArray.push("")
-    if(Math.random()*10000<1){
+    if (Math.random() * 10000 < 1) {
         stringArray.push(randFromArr(texts.fail))
-    }else{
+    } else {
         stringArray.push(randFromArr(texts.catch))
         stringArray.push("")
         stringArray.push(`Вы поймали: ${loot.name} ${rarity[loot.rarity].emoji} ${rarity[loot.rarity].name}(${loot.rarity + 1}/10)`)
         stringArray.push(`\`${loot.description}\``)
     }
 
-    if(userRequestsCounter[ctx.update.inline_query.from.id]>=10){
-        userRequestsCounter[ctx.update.inline_query.from.id]=0
+    if (userRequestsCounter[ctx.update.inline_query.from.id] >= 10) {
+        userRequestsCounter[ctx.update.inline_query.from.id] = 0
         stringArray.push("")
         stringArray.push("Помоги боту, [предложи предмет](https://forms.gle/4pG5gVsS2Uee5rYb7)!")
     }
@@ -76,5 +76,39 @@ bot.on('inline_query', async (ctx) => {
     }], { cache_time: 0 });
 });
 
+bot.command('lootpool', async (ctx) => {
+    const lootlist = []
+    for (const rar of rarity) {
+        lootlist.push({
+            name: rar.emoji + ' ' + rar.name,
+            items: []
+        })
+    }
+
+    lootData.forEach((item, id) => {
+        lootlist[item.rarity].items.push({
+            name: item.name,
+            id
+        })
+    })
+
+    for (const listID in lootlist) {
+        lootlist[listID].items = lootlist[listID].items.sort((a, b) => a.id - b.id)
+    }
+
+    for (const [rar, list] of lootlist.entries()) {
+        const resultString = [];
+        resultString.push(`Список предметов класса ${list.name} (${rar + 1}/10)`);
+
+        for (const item of list.items) {
+            resultString.push(`${item.id}. ${item.name}`);
+        }
+
+        // Ожидаем отправки каждого сообщения
+        await ctx.reply(resultString.join('\n'));
+    }
+})
 
 bot.launch();
+process.once('SIGINT', () => bot.stop('SIGINT'));
+process.once('SIGTERM', () => bot.stop('SIGTERM'));
