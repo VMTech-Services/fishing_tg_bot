@@ -22,52 +22,142 @@ function getRandomLoot() {
     return getRandomByRarity(lootData, level)
 }
 
-function escapeHTML(text) {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
+// function escapeHTML(text) {
+//     return text
+//         .replace(/&/g, '&amp;')
+//         .replace(/</g, '&lt;')
+//         .replace(/>/g, '&gt;');
+// }
 
 function randFromArr(arr) {
     return arr[Math.floor(Math.random() * arr.length)]
 }
 
-const userRequestsCounter = {}
+const usersData = {}
 
 bot.on('inline_query', async (ctx) => {
-    const loot = getRandomLoot();
 
-    if (!userRequestsCounter[ctx.update.inline_query.from.id]) {
-        userRequestsCounter[ctx.update.inline_query.from.id] = 1
+    if (!usersData[ctx.update.inline_query.from.id]) {
+        usersData[ctx.update.inline_query.from.id] = {
+            requestsCount: 0
+        }
+    }
+    usersData[ctx.update.inline_query.from.id].requestsCount += 1
+
+    let fishingRepeats = 0
+
+    const fishQuery = parseInt(ctx.update.inline_query.query)
+
+    if (fishQuery) {
+        fishingRepeats = fishQuery
     } else {
-        userRequestsCounter[ctx.update.inline_query.from.id] += 1
+        fishingRepeats = 1
     }
 
     const stringArray = []
-    stringArray.push(randFromArr(texts.throw))
-    stringArray.push("")
-    stringArray.push(randFromArr(texts.unwind))
-    stringArray.push("")
-    if (Math.random() * 10000 < 1) {
-        stringArray.push(randFromArr(texts.fail))
-    } else {
-        stringArray.push(randFromArr(texts.catch))
-        stringArray.push("")
-        stringArray.push(`Вы поймали: ${loot.name} ${rarity[loot.rarity].emoji} ${rarity[loot.rarity].name}(${loot.rarity + 1}/10)`)
-        stringArray.push(`\`${loot.description}\``)
+
+    let isBigRequest = false
+
+    if (fishingRepeats > 10) {
+        fishingRepeats = 10
+        isBigRequest = true
     }
 
-    if (userRequestsCounter[ctx.update.inline_query.from.id] >= 10) {
-        userRequestsCounter[ctx.update.inline_query.from.id] = 0
+    if (fishingRepeats > 1) {
+        const loot = [];
+        for (let i = 0; i < fishingRepeats; i++) {
+            loot.push(getRandomLoot());
+        }
+
+        const organizedLoot = [];
+        const rarityMap = new Map();
+
+        for (const item of loot) {
+            const rarity = item.rarity;
+            if (!rarityMap.has(rarity)) {
+                rarityMap.set(rarity, new Map());
+            }
+            const itemsMap = rarityMap.get(rarity);
+
+            if (itemsMap.has(item.name)) {
+                const existing = itemsMap.get(item.name);
+                itemsMap.set(item.name, { ...existing, count: existing.count + 1 });
+            } else {
+                itemsMap.set(item.name, {
+                    count: 1,
+                    description: item.description
+                });
+            }
+        }
+
+        const sortedRarities = [...rarityMap.keys()].sort((a, b) => a - b);
+
+        for (const rarity of sortedRarities) {
+            const itemsData = [];
+            const itemsMap = rarityMap.get(rarity);
+
+            for (const [name, data] of itemsMap) {
+                itemsData.push({
+                    name,
+                    count: data.count,
+                    description: data.description
+                });
+            }
+
+            organizedLoot.push({
+                rarity: rarity,
+                items: itemsData
+            });
+        }
+
+        stringArray.push(randFromArr(texts.mulifish.going));
+        // stringArray.push("");
+        stringArray.push(randFromArr(texts.mulifish.fishing));
+        // stringArray.push("");
+        stringArray.push(randFromArr(texts.mulifish.returning));
+        stringArray.push("");
+        stringArray.push("Ваш улов:");
+
+        for (const rarityGroup of organizedLoot) {
+            const rarityInfo = rarity[rarityGroup.rarity];
+            stringArray.push("");
+            stringArray.push(`${rarityInfo.emoji} ${rarityInfo.name} (${rarityGroup.rarity + 1}/10):`);
+
+            for (const item of rarityGroup.items) {
+                stringArray.push(""); 
+                stringArray.push(`- ${item.name} ×${item.count}`);
+                stringArray.push(`\`${item.description}\``);
+            }
+        }
+    } else {
+        const loot = getRandomLoot();
+
+        stringArray.push(randFromArr(texts.throw))
+        // stringArray.push("")
+        stringArray.push(randFromArr(texts.unwind))
+        // stringArray.push("")
+        if (Math.random() * 1000 < 1) {
+            stringArray.push(randFromArr(texts.fail))
+        } else {
+            stringArray.push(randFromArr(texts.catch))
+            stringArray.push("")
+            stringArray.push(`Вы поймали: ${loot.name} ${rarity[loot.rarity].emoji} ${rarity[loot.rarity].name}(${loot.rarity + 1}/10)`)
+            stringArray.push(`\`${loot.description}\``)
+        }
+    }
+
+    if (usersData[ctx.update.inline_query.from.id].requestsCount % 10 == 0) {
         stringArray.push("")
         stringArray.push("Помоги боту, [предложи предмет](https://forms.gle/4pG5gVsS2Uee5rYb7)!")
     }
 
+    stringArray.push("")
+    stringArray.push("`fishygame_bot-v2`")
+
     ctx.answerInlineQuery([{
         type: 'article',
         id: `loot_${Date.now()}`,
-        title: '🎣 Закинуть удочку',
+        title: fishingRepeats == 1 ? '🎣 Закинуть удочку' : `🎣 Пойти рыбачить (х${fishingRepeats}${isBigRequest ? 'max' : ''}) `,
         input_message_content: {
             message_text: stringArray.join('\n'),
             parse_mode: 'markdown',
@@ -104,7 +194,6 @@ bot.command('lootpool', async (ctx) => {
             resultString.push(`${item.id}. ${item.name}`);
         }
 
-        // Ожидаем отправки каждого сообщения
         await ctx.reply(resultString.join('\n'));
     }
 })
