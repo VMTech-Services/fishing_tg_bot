@@ -7,7 +7,15 @@ const texts = require('./texts.json')
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-const getRandomByRarity = (i, t) => (f => f.length ? f[Math.random() * f.length | 0] : t > 0 ? getRandomByRarity(i, t - 1) : null)(i.filter(x => x.rarity === t));
+function getRandomByRarity(table, level) {
+    const lootOfLevel = lootData.filter(x => x.rarity == level)
+
+    if (lootOfLevel.length > 0) {
+        return lootOfLevel[Math.floor(Math.random() * lootOfLevel.length)]
+    } else {
+        return getRandomByRarity(table, level)
+    }
+}//= (i, t) => (f => f.length ? f[Math.random() * f.length | 0] : t > 0 ? getRandomByRarity(i, t - 1) : null)(i.filter(x => x.rarity === t));
 
 function getRandomLoot() {
     let level = 0
@@ -124,7 +132,7 @@ bot.on('inline_query', async (ctx) => {
             stringArray.push(`${rarityInfo.emoji} ${rarityInfo.name} (${rarityGroup.rarity + 1}/10):`);
 
             for (const item of rarityGroup.items) {
-                stringArray.push(""); 
+                stringArray.push("");
                 stringArray.push(`- ${item.name} ×${item.count}`);
                 stringArray.push(`\`${item.description}\``);
             }
