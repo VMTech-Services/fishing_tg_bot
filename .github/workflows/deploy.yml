@@ -9,44 +9,46 @@ on:
 jobs:
   build-and-run:
     runs-on: [self-hosted, windows]
-
     env:
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}    # автоматически создаётся перед стартом job :contentReference[oaicite:0]{index=0}
+      GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Prepare workspace and clone repo
         shell: powershell
         run: |
-          # 1. Вычисляем ветку (refs/heads/main → main)
-          $branch = $env:GITHUB_REF -replace '^refs/heads/',''
-          Write-Host "==> Cloning branch: $branch"
+         # извлекаем имя ветки из GITHUB_REF (refs/heads/main → main)
+          $ref = $env:GITHUB_REF
+          $branch = $ref -replace '^refs/heads/', ''
+          Write-Host "Cloning branch: $branch"
+          
+          # формируем URL с токеном GITHUB_TOKEN
+          $repo = "${{ github.repository }}"
+          $token = "${{ secrets.GITHUB_TOKEN }}"
+          $url = "https://x-access-token:$token@github.com/$repo.git"
 
-          # 2. Формируем URL для git clone с автоматическим токеном
-          $repo = $env:GITHUB_REPOSITORY
-          $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repo.git"
-          Write-Host "==> Repo URL (masked): $($url.Substring(0,40))..."
-
-          # 3. Очищаем текущую папку (удаляем всё, что осталось от прошлых прогонов)
-          Write-Host "==> Cleaning workspace..."
-          Get-ChildItem -Force | Where-Object { $_.Name -notin '.','..' } | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-
-          # 4. Клонируем одну ветку и один коммит
-          Write-Host "==> Running git clone..."
+          Write-Host "Clone URL starts with: $($url.Substring(0,40))..."  # токен будет замаскирован
+          
+          # пробуем клонировать
           git clone --depth 1 --branch $branch $url .
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
+            Write-Error "git clone failed with exit code $LASTEXITCODE"
             exit $LASTEXITCODE
           }
 
       - name: Build Docker image
         run: docker build -t my-app:${{ github.sha }} .
-        env:
-          # чтобы Docker команду тоже видела переменные
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+        shell: powershell
 
       - name: Stop previous container
-        run: docker rm -f my-app || exit 0
+        shell: powershell
+        run: |
+          Write-Host "==> Stopping previous container (if any)…"
+          try {
+            docker rm -f my-app
+          } catch {
+            Write-Host "No existing container to remove, or error ignored."
+          }
 
       - name: Run new container with Telegram token
         shell: powershell
