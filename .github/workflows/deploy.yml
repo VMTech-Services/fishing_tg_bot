@@ -10,27 +10,38 @@ jobs:
   build-and-run:
     runs-on: [self-hosted, windows]
     env:
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}       # Telegram bot token stored in GitHub Secrets
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token for repo checkout
 
     steps:
       - name: Clone into fresh folder
         shell: powershell
         run: |
-          # Extract branch name from GITHUB_REF (refs/heads/main -> main)
+          # Extract branch name (refs/heads/main -> main)
           $branch = $env:GITHUB_REF -replace '^refs/heads/',''
           Write-Host "==> Cloning branch: $branch"
 
-          # Build clone URL using GITHUB_TOKEN for authentication
-          $repo = $env:GITHUB_REPOSITORY
-          $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repo.git"
-          Write-Host "==> Repo URL masked: $($url.Substring(0,40))..."
+          # Set repository and derive image/container name
+          $repoFull  = $env:GITHUB_REPOSITORY            # owner/repo
+          $repoName  = $repoFull.Split('/')[1]           # repo
+          Write-Host "==> Repository name: $repoName"
 
-          # Create a clean directory and change into it
-          New-Item -ItemType Directory -Name fresh_repo | Out-Null
-          Set-Location fresh_repo
+          # Build clone URL with GITHUB_TOKEN
+          $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
+          Write-Host "==> Clone URL masked: $($url.Substring(0,40))..."
 
-          # Clone only one commit of the target branch
+          # Remove existing clone folder if it exists
+          $path = Join-Path $PWD "fresh_repo"
+          if (Test-Path $path) {
+            Write-Host "==> Removing existing 'fresh_repo' directory"
+            Remove-Item -Recurse -Force $path
+          }
+
+          # Create and enter clean directory
+          New-Item -ItemType Directory -Path $path | Out-Null
+          Set-Location $path
+
+          # Clone only latest commit from target branch
           git clone --depth 1 --branch $branch $url .
           if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
@@ -40,28 +51,29 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
-          # Build the Docker image with a tag based on commit SHA
-          Write-Host "==> Building Docker image from fresh_repo"
-          docker build -t my-app:${{ github.sha }} fresh_repo
+          # Build (or rebuild) Docker image with tag 'repoName:latest'
+          Write-Host "==> Building Docker image: $repoName:latest"
+          docker build -t $repoName:latest fresh_repo
 
-      - name: Stop previous container
+      - name: Stop and remove existing container
         shell: powershell
         run: |
-          # Stop and remove any existing container named 'my-app'
-          Write-Host "==> Stopping previous container (if any)…"
+          # Stop and remove old container named 'repoName'
+          Write-Host "==> Removing existing container: $repoName (if any)"
           try {
-            docker rm -f my-app
+            docker rm -f $repoName
           } catch {
-            Write-Host "No existing container to remove, continuing…"
+            Write-Host "No existing container to remove."
           }
 
       - name: Run container and verify startup
         shell: powershell
         run: |
-          # Run the container in detached mode and capture the container ID
-          $cid = docker run -d --name my-app `
-            -e TELEGRAM_BOT_TOKEN="$env:TELEGRAM_BOT_TOKEN" `
-            my-app:${{ github.sha }}
+          # Run container in detached mode and capture its ID
+          Write-Host "==> Starting container: $repoName"
+          $cid = docker run -d --name $repoName `
+            -e BOT_TOKEN="$env:BOT_TOKEN" `
+            $repoName:latest
           Write-Host "✅ Container started with ID: $cid"
 
           # Verify the container is running
