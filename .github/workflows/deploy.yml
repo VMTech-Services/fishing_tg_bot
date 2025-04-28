@@ -2,7 +2,6 @@
 
 name: Deploy Docker on local Windows Runner
 
-# Ensure only one run per branch; cancel any in-progress runs to avoid spamming
 concurrency:
   group: ${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: true
@@ -12,56 +11,62 @@ on:
     branches: [main]
 
 jobs:
-  build-and-run:
+  clone:
     runs-on: [self-hosted, windows]
-    env:
-      BOT_TOKEN:     ${{ secrets.BOT_TOKEN }}           # Telegram bot token stored in GitHub Secrets
-      GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}        # Token for repo checkout
-      REPO_NAME:     ${{ github.event.repository.name }}  # Derive repository name from GitHub context
-
+    outputs:
+      repo-path: ${{ steps.set-output.outputs.repo-path }}
     steps:
       - name: Clone into fresh folder
+        id: set-output
         shell: powershell
         run: |
-          # Extract branch name (refs/heads/main -> main)
           $branch = $env:GITHUB_REF -replace '^refs/heads/',''
           Write-Host "==> Cloning branch: $branch"
-
-          # Build clone URL with GITHUB_TOKEN
-          $repoFull = $env:GITHUB_REPOSITORY           # owner/repo
-          $url      = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
-          Write-Host "==> Clone URL masked: $($url.Substring(0,40))..."
-
-          # Remove existing clone folder if it exists
+          
+          $repoFull = $env:GITHUB_REPOSITORY
+          $url = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
           $path = Join-Path $PWD "fresh_repo"
+
           if (Test-Path $path) {
             Write-Host "==> Removing existing 'fresh_repo' directory"
             Remove-Item -Recurse -Force $path
           }
 
-          # Create and enter clean directory
           New-Item -ItemType Directory -Path $path | Out-Null
           Set-Location $path
-
-          # Clone only latest commit from target branch
+          
           git clone --depth 1 --branch $branch $url .
           if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
             exit $LASTEXITCODE
           }
 
+          echo "::set-output name=repo-path::fresh_repo"
+
+  build:
+    needs: clone
+    runs-on: [self-hosted, windows]
+    env:
+      REPO_NAME: ${{ github.event.repository.name }}
+    steps:
       - name: Build Docker image
         shell: powershell
         run: |
-          # Build Docker image tagged as '<repo>:latest'
+          $repoPath = "${{ needs.clone.outputs.repo-path }}"
           $imageName = "$($env:REPO_NAME):latest"
           Write-Host "==> Building Docker image: $imageName"
-          docker build -t $imageName fresh_repo
+          docker build -t $imageName $repoPath
 
+  deploy:
+    needs: build
+    runs-on: [self-hosted, windows]
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+      REPO_NAME: ${{ github.event.repository.name }}
+    steps:
       - name: Stop and remove existing container
         shell: powershell
         run: |
-          # Stop and remove old container named '<repo>'
           Write-Host "==> Removing existing container: $env:REPO_NAME (if any)"
           try {
             docker rm -f $env:REPO_NAME
@@ -69,10 +74,9 @@ jobs:
             Write-Host "No existing container to remove."
           }
 
-      - name: Run container and verify startup
+      - name: Run container and verify
         shell: powershell
         run: |
-          # Run container from the latest image and capture its ID
           $imageName = "$($env:REPO_NAME):latest"
           Write-Host "==> Starting container: $env:REPO_NAME with image $imageName"
           $cid = docker run -d --name $env:REPO_NAME `
@@ -80,7 +84,6 @@ jobs:
             $imageName
           Write-Host "✅ Container started with ID: $cid"
 
-          # Verify the container is running using inspect
           Write-Host "==> Verifying container state for: $env:REPO_NAME"
           $status = docker inspect -f '{{.State.Running}}' $env:REPO_NAME
           if ($status.Trim() -eq 'true') {
