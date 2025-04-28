@@ -48,14 +48,15 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
-          # Build (or rebuild) Docker image with tag 'REPO_NAME:latest'
-          Write-Host "==> Building Docker image: $env:REPO_NAME:latest"
-          docker build -t $env:REPO_NAME:latest fresh_repo
+          # Build Docker image tagged as 'repoName:latest'
+          $imageName = "$($env:REPO_NAME):latest"
+          Write-Host "==> Building Docker image: $imageName"
+          docker build -t $imageName fresh_repo
 
       - name: Stop and remove existing container
         shell: powershell
         run: |
-          # Stop and remove old container named 'REPO_NAME'
+          # Stop and remove old container named 'repoName'
           Write-Host "==> Removing existing container: $env:REPO_NAME (if any)"
           try {
             docker rm -f $env:REPO_NAME
@@ -66,11 +67,12 @@ jobs:
       - name: Run container and verify startup
         shell: powershell
         run: |
-          # Run container in detached mode and capture its ID
-          Write-Host "==> Starting container: $env:REPO_NAME"
+          # Start container from the latest image and verify
+          $imageName = "$($env:REPO_NAME):latest"
+          Write-Host "==> Starting container: $env:REPO_NAME with image $imageName"
           $cid = docker run -d --name $env:REPO_NAME `
             -e BOT_TOKEN="$env:BOT_TOKEN" `
-            $env:REPO_NAME:latest
+            $imageName
           Write-Host "✅ Container started with ID: $cid"
 
           # Verify the container is running
