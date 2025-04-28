@@ -1,6 +1,6 @@
 # .github/workflows/deploy.yml
 
-name: Fish-Bot deply
+name: Fish-Bot deploy
 
 concurrency:
   group: ${{ github.repository }}-${{ github.ref }}
