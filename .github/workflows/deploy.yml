@@ -1,51 +1,50 @@
-# .github/workflows/deploy.yml
+name: Fish-Bot deploy
 
-name: Deploy Docker on local Windows Runner
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+
+env:
+  REPO_NAME: ${{ github.event.repository.name }}
+  IMAGE_TAG: latest
 
 jobs:
-  build-and-run:
+  clone:
     runs-on: [self-hosted, windows]
-
-    env:
-      # Telegram-токен пробрасываем в job
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-
+    outputs:
+      repo-path: ${{ steps.clone.outputs.repo-path }}
     steps:
-      - name: Checkout repository via git clone
-        shell: powershell
+      - name: Checkout code
+        id: clone
+        shell: pwsh
         run: |
-          # извлекаем имя ветки из GITHUB_REF (refs/heads/main → main)
-          $ref = $env:GITHUB_REF
-          $branch = $ref -replace '^refs/heads/', ''
-          Write-Host "Cloning branch: $branch"
-          
-          # формируем URL с токеном GITHUB_TOKEN
-          $repo = "${{ github.repository }}"
-          $token = "${{ secrets.GITHUB_TOKEN }}"
-          $url = "https://x-access-token:$token@github.com/$repo.git"
+          $path = "fresh_repo"
+          Remove-Item $path -Recurse -Force -EA SilentlyContinue
+          git clone --depth 1 --branch $($env:GITHUB_REF.Split('/')[-1]) `
+            "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$($env:GITHUB_REPOSITORY).git" $path
+          echo "repo-path=$path" >> $env:GITHUB_OUTPUT
 
-          Write-Host "Clone URL starts with: $($url.Substring(0,40))..."  # токен будет замаскирован
-          
-          # пробуем клонировать
-          git clone --depth 1 --branch $branch $url .
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "git clone failed with exit code $LASTEXITCODE"
-            exit $LASTEXITCODE
-          }
-
+  build:
+    needs: clone
+    runs-on: [self-hosted, windows]
+    steps:
       - name: Build Docker image
-        run: docker build -t my-app:${{ github.sha }} .
+        shell: pwsh
+        run: docker build -t $env:REPO_NAME:$env:IMAGE_TAG ${{ needs.clone.outputs.repo-path }}
 
-      - name: Stop previous container
-        run: docker rm -f my-app || exit 0
-
-      - name: Run new container with Telegram token
+  deploy:
+    needs: build
+    runs-on: [self-hosted, windows]
+    env:
+      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+    steps:
+      - name: Deploy container
+        shell: pwsh
         run: |
-          docker run -d --name my-app `
-            -e TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" `
-            my-app:${{ github.sha }}
+          docker rm -f $env:REPO_NAME 2>$null
+          docker run -d --name $env:REPO_NAME -e BOT_TOKEN=$env:BOT_TOKEN $env:REPO_NAME:$env:IMAGE_TAG
+          if (!(docker inspect -f '{{.State.Running}}' $env:REPO_NAME)) { exit 1 }
