@@ -1,6 +1,6 @@
 # .github/workflows/deploy.yml
 
-name: Deploy Docker on local Windows Runner
+name: Fish-Bot deply
 
 concurrency:
   group: ${{ github.repository }}-${{ github.ref }}
