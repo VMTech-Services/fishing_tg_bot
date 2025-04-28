@@ -2,6 +2,11 @@
 
 name: Deploy Docker on local Windows Runner
 
+# Ensure only one run per branch; cancel any in-progress runs to avoid spamming
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [main]
