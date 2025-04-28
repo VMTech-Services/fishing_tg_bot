@@ -10,8 +10,9 @@ jobs:
   build-and-run:
     runs-on: [self-hosted, windows]
     env:
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}       # Telegram bot token stored in GitHub Secrets
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Token for repo checkout
+      BOT_TOKEN:     ${{ secrets.BOT_TOKEN }}           # Telegram bot token stored in GitHub Secrets
+      GITHUB_TOKEN:  ${{ secrets.GITHUB_TOKEN }}        # Token for repo checkout
+      REPO_NAME:     ${{ github.event.repository.name }}  # Derive repository name from GitHub context
 
     steps:
       - name: Clone into fresh folder
@@ -21,13 +22,9 @@ jobs:
           $branch = $env:GITHUB_REF -replace '^refs/heads/',''
           Write-Host "==> Cloning branch: $branch"
 
-          # Set repository and derive image/container name
-          $repoFull  = $env:GITHUB_REPOSITORY            # owner/repo
-          $repoName  = $repoFull.Split('/')[1]           # repo
-          Write-Host "==> Repository name: $repoName"
-
           # Build clone URL with GITHUB_TOKEN
-          $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
+          $repoFull = $env:GITHUB_REPOSITORY           # owner/repo
+          $url      = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
           Write-Host "==> Clone URL masked: $($url.Substring(0,40))..."
 
           # Remove existing clone folder if it exists
@@ -51,17 +48,17 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
-          # Build (or rebuild) Docker image with tag 'repoName:latest'
-          Write-Host "==> Building Docker image: $repoName:latest"
-          docker build -t $repoName:latest fresh_repo
+          # Build (or rebuild) Docker image with tag 'REPO_NAME:latest'
+          Write-Host "==> Building Docker image: $env:REPO_NAME:latest"
+          docker build -t $env:REPO_NAME:latest fresh_repo
 
       - name: Stop and remove existing container
         shell: powershell
         run: |
-          # Stop and remove old container named 'repoName'
-          Write-Host "==> Removing existing container: $repoName (if any)"
+          # Stop and remove old container named 'REPO_NAME'
+          Write-Host "==> Removing existing container: $env:REPO_NAME (if any)"
           try {
-            docker rm -f $repoName
+            docker rm -f $env:REPO_NAME
           } catch {
             Write-Host "No existing container to remove."
           }
@@ -70,10 +67,10 @@ jobs:
         shell: powershell
         run: |
           # Run container in detached mode and capture its ID
-          Write-Host "==> Starting container: $repoName"
-          $cid = docker run -d --name $repoName `
+          Write-Host "==> Starting container: $env:REPO_NAME"
+          $cid = docker run -d --name $env:REPO_NAME `
             -e BOT_TOKEN="$env:BOT_TOKEN" `
-            $repoName:latest
+            $env:REPO_NAME:latest
           Write-Host "✅ Container started with ID: $cid"
 
           # Verify the container is running
