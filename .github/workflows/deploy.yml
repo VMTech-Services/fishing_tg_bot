@@ -1,0 +1,38 @@
+# .github/workflows/deploy.yml
+
+name: Deploy Docker on local Windows Runner
+
+# 1. Триггер на пуши в main
+on:
+  push:
+    branches:
+      - main                                # реагируем только на ветку main :contentReference[oaicite:1]{index=1}
+
+jobs:
+  build-and-run:
+    # 2. Запуск на вашем self-hosted Windows runner
+    runs-on: [self-hosted, windows]       # используем self-hosted runner под Windows :contentReference[oaicite:2]{index=2}
+
+    # 3. Передаём весь job-level env с секретом TELEGRAM_BOT_TOKEN
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}  # подтягиваем из GitHub Secrets :contentReference[oaicite:3]{index=3}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4        # клонирует репозиторий в рабочую папку runner’а :contentReference[oaicite:4]{index=4}
+
+      - name: Build Docker image
+        run: docker build -t my-app:${{ github.sha }} . 
+        # создаёт образ с тегом по SHA коммита
+
+      - name: Stop previous container
+        run: |
+          docker rm -f my-app || exit 0
+        # удаляем старый контейнер, если он запущен
+
+      - name: Run new container with Telegram token
+        run: |
+          docker run -d --name my-app \
+            -e TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+            my-app:${{ github.sha }}
+        # передаём секрет в контейнер через -e :contentReference[oaicite:5]{index=5}
