@@ -197,6 +197,10 @@ bot.command('lootpool', async (ctx) => {
     }
 })
 
+bot.command('test',(ctx)=>{
+    ctx.reply('test')
+})
+
 bot.launch();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
