@@ -11,26 +11,26 @@ jobs:
     runs-on: [self-hosted, windows]
     env:
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
       - name: Clone into fresh folder
         shell: powershell
         run: |
-          # 1. Вытаскиваем имя ветки (refs/heads/main → main)
+          # Extract branch name from GITHUB_REF (refs/heads/main -> main)
           $branch = $env:GITHUB_REF -replace '^refs/heads/',''
           Write-Host "==> Cloning branch: $branch"
 
-          # 2. Формируем URL с GITHUB_TOKEN
+          # Build clone URL using GITHUB_TOKEN for authentication
           $repo = $env:GITHUB_REPOSITORY
           $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repo.git"
-          Write-Host "==> Repo URL masked: $($url.Substring(0,40))..."  
+          Write-Host "==> Repo URL masked: $($url.Substring(0,40))..."
 
-          # 3. Создаём чистую директорию и переходим в неё
+          # Create a clean directory and change into it
           New-Item -ItemType Directory -Name fresh_repo | Out-Null
           Set-Location fresh_repo
 
-          # 4. Клонируем одну ветку и один коммит
+          # Clone only one commit of the target branch
           git clone --depth 1 --branch $branch $url .
           if ($LASTEXITCODE -ne 0) {
             Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
@@ -40,12 +40,14 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
+          # Build the Docker image with a tag based on commit SHA
           Write-Host "==> Building Docker image from fresh_repo"
           docker build -t my-app:${{ github.sha }} fresh_repo
 
       - name: Stop previous container
         shell: powershell
         run: |
+          # Stop and remove any existing container named 'my-app'
           Write-Host "==> Stopping previous container (if any)…"
           try {
             docker rm -f my-app
@@ -53,10 +55,20 @@ jobs:
             Write-Host "No existing container to remove, continuing…"
           }
 
-      - name: Run new container with Telegram token
+      - name: Run container and verify startup
         shell: powershell
         run: |
-          Write-Host "==> Starting container with TELEGRAM_BOT_TOKEN"
-          docker run -d --name my-app `
+          # Run the container in detached mode and capture the container ID
+          $cid = docker run -d --name my-app `
             -e TELEGRAM_BOT_TOKEN="$env:TELEGRAM_BOT_TOKEN" `
             my-app:${{ github.sha }}
+          Write-Host "✅ Container started with ID: $cid"
+
+          # Verify the container is running
+          $running = docker ps -q --filter "id=$cid"
+          if ($running -eq $cid) {
+            Write-Host "✅ Verification passed: container is running"
+          } else {
+            Write-Error "❌ Verification failed: container is NOT running"
+            exit 1
+          }
