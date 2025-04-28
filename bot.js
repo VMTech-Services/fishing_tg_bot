@@ -15,7 +15,7 @@ function getRandomByRarity(table, level) {
     } else {
         return getRandomByRarity(table, level)
     }
-}//= (i, t) => (f => f.length ? f[Math.random() * f.length | 0] : t > 0 ? getRandomByRarity(i, t - 1) : null)(i.filter(x => x.rarity === t));
+}
 
 function getRandomLoot() {
     let level = 0
@@ -29,13 +29,6 @@ function getRandomLoot() {
     }
     return getRandomByRarity(lootData, level)
 }
-
-// function escapeHTML(text) {
-//     return text
-//         .replace(/&/g, '&amp;')
-//         .replace(/</g, '&lt;')
-//         .replace(/>/g, '&gt;');
-// }
 
 function randFromArr(arr) {
     return arr[Math.floor(Math.random() * arr.length)]
@@ -141,9 +134,7 @@ bot.on('inline_query', async (ctx) => {
         const loot = getRandomLoot();
 
         stringArray.push(randFromArr(texts.throw))
-        // stringArray.push("")
         stringArray.push(randFromArr(texts.unwind))
-        // stringArray.push("")
         if (Math.random() * 1000 < 1) {
             stringArray.push(randFromArr(texts.fail))
         } else {
@@ -209,5 +200,3 @@ bot.command('lootpool', async (ctx) => {
 bot.launch();
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
-
-//testedit
