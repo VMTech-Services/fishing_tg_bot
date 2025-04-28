@@ -5,39 +5,47 @@ name: Deploy Docker on local Windows Runner
 on:
   push:
     branches:
-      - main                                # триггер на пуши в main
+      - main
 
 jobs:
   build-and-run:
-    runs-on: [self-hosted, windows]       # ваш self-hosted Windows runner
+    runs-on: [self-hosted, windows]
 
-    # передаём секрет в переменную окружения всего job
     env:
+      # Telegram-токен пробрасываем в job
       BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
 
     steps:
-      - name: Checkout code via git clone
-        # GITHUB_TOKEN создаётся автоматически перед стартом job :contentReference[oaicite:0]{index=0}
-        env:
-          TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.ref_name }}
+      - name: Checkout repository via git clone
+        shell: powershell
         run: |
-          # клонируем только нужную ветку и один коммит
-          git clone --depth 1 \
-            --branch "$BRANCH" \
-            "https://x-access-token:$TOKEN@github.com/$REPO.git" .
+          # извлекаем имя ветки из GITHUB_REF (refs/heads/main → main)
+          $ref = $env:GITHUB_REF
+          $branch = $ref -replace '^refs/heads/', ''
+          Write-Host "Cloning branch: $branch"
+          
+          # формируем URL с токеном GITHUB_TOKEN
+          $repo = "${{ github.repository }}"
+          $token = "${{ secrets.GITHUB_TOKEN }}"
+          $url = "https://x-access-token:$token@github.com/$repo.git"
+
+          Write-Host "Clone URL starts with: $($url.Substring(0,40))..."  # токен будет замаскирован
+          
+          # пробуем клонировать
+          git clone --depth 1 --branch $branch $url .
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "git clone failed with exit code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
       - name: Build Docker image
-        run: |
-          docker build -t my-app:${{ github.sha }} .
+        run: docker build -t my-app:${{ github.sha }} .
 
       - name: Stop previous container
-        run: |
-          docker rm -f my-app || exit 0
+        run: docker rm -f my-app || exit 0
 
       - name: Run new container with Telegram token
         run: |
-          docker run -d --name my-app \
-            -e TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" \
+          docker run -d --name my-app `
+            -e TELEGRAM_BOT_TOKEN="${{ secrets.TELEGRAM_BOT_TOKEN }}" `
             my-app:${{ github.sha }}
