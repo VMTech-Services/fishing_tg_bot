@@ -14,31 +14,34 @@ jobs:
       GITHUB_TOKEN:      ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      - name: Prepare workspace and clone repo
+      - name: Clone into fresh folder
         shell: powershell
         run: |
-         # извлекаем имя ветки из GITHUB_REF (refs/heads/main → main)
-          $ref = $env:GITHUB_REF
-          $branch = $ref -replace '^refs/heads/', ''
-          Write-Host "Cloning branch: $branch"
-          
-          # формируем URL с токеном GITHUB_TOKEN
-          $repo = "${{ github.repository }}"
-          $token = "${{ secrets.GITHUB_TOKEN }}"
-          $url = "https://x-access-token:$token@github.com/$repo.git"
+          # 1. Вытаскиваем имя ветки (refs/heads/main → main)
+          $branch = $env:GITHUB_REF -replace '^refs/heads/',''
+          Write-Host "==> Cloning branch: $branch"
 
-          Write-Host "Clone URL starts with: $($url.Substring(0,40))..."  # токен будет замаскирован
-          
-          # пробуем клонировать
+          # 2. Формируем URL с GITHUB_TOKEN
+          $repo = $env:GITHUB_REPOSITORY
+          $url  = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repo.git"
+          Write-Host "==> Repo URL masked: $($url.Substring(0,40))..."  
+
+          # 3. Создаём чистую директорию и переходим в неё
+          New-Item -ItemType Directory -Name fresh_repo | Out-Null
+          Set-Location fresh_repo
+
+          # 4. Клонируем одну ветку и один коммит
           git clone --depth 1 --branch $branch $url .
           if ($LASTEXITCODE -ne 0) {
-            Write-Error "git clone failed with exit code $LASTEXITCODE"
+            Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
             exit $LASTEXITCODE
           }
 
       - name: Build Docker image
-        run: docker build -t my-app:${{ github.sha }} .
         shell: powershell
+        run: |
+          Write-Host "==> Building Docker image from fresh_repo"
+          docker build -t my-app:${{ github.sha }} fresh_repo
 
       - name: Stop previous container
         shell: powershell
@@ -47,7 +50,7 @@ jobs:
           try {
             docker rm -f my-app
           } catch {
-            Write-Host "No existing container to remove, or error ignored."
+            Write-Host "No existing container to remove, continuing…"
           }
 
       - name: Run new container with Telegram token
