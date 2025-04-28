@@ -48,7 +48,7 @@ jobs:
       - name: Build Docker image
         shell: powershell
         run: |
-          # Build Docker image tagged as 'repoName:latest'
+          # Build Docker image tagged as '<repo>:latest'
           $imageName = "$($env:REPO_NAME):latest"
           Write-Host "==> Building Docker image: $imageName"
           docker build -t $imageName fresh_repo
@@ -56,7 +56,7 @@ jobs:
       - name: Stop and remove existing container
         shell: powershell
         run: |
-          # Stop and remove old container named 'repoName'
+          # Stop and remove old container named '<repo>'
           Write-Host "==> Removing existing container: $env:REPO_NAME (if any)"
           try {
             docker rm -f $env:REPO_NAME
@@ -67,7 +67,7 @@ jobs:
       - name: Run container and verify startup
         shell: powershell
         run: |
-          # Start container from the latest image and verify
+          # Run container from the latest image and capture its ID
           $imageName = "$($env:REPO_NAME):latest"
           Write-Host "==> Starting container: $env:REPO_NAME with image $imageName"
           $cid = docker run -d --name $env:REPO_NAME `
@@ -75,11 +75,12 @@ jobs:
             $imageName
           Write-Host "✅ Container started with ID: $cid"
 
-          # Verify the container is running
-          $running = docker ps -q --filter "id=$cid"
-          if ($running -eq $cid) {
+          # Verify the container is running using inspect
+          Write-Host "==> Verifying container state for: $env:REPO_NAME"
+          $status = docker inspect -f '{{.State.Running}}' $env:REPO_NAME
+          if ($status.Trim() -eq 'true') {
             Write-Host "✅ Verification passed: container is running"
           } else {
-            Write-Error "❌ Verification failed: container is NOT running"
+            Write-Error "❌ Verification failed: container is NOT running (status=$status)"
             exit 1
           }
