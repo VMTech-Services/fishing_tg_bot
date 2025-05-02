@@ -1,92 +1,82 @@
-name: Fish-Bot deploy
-
-concurrency:
-  group: ${{ github.repository }}-${{ github.ref }}
-  cancel-in-progress: true
+name: fish-game-bot deploy
 
 on:
   push:
     branches: [main]
 
+concurrency:
+  group: ${{ github.repository }}-${{ github.ref_name }}
+  cancel-in-progress: true
+
+env:
+  REPO_NAME: turbo_repost_bot
+
 jobs:
-  clone:
+  cleanup:
+    name: Cleanup old container and image
     runs-on: [self-hosted, windows]
-    outputs:
-      repo-path: ${{ steps.set-output.outputs.repo-path }}
     steps:
-      - name: Clone into fresh folder
-        id: set-output
+      - name: Stop and remove container
         shell: powershell
         run: |
-          $branch = $env:GITHUB_REF -replace '^refs/heads/',''
-          Write-Host "==> Cloning branch: $branch"
-          
-          $repoFull = $env:GITHUB_REPOSITORY
-          $url = "https://x-access-token:$($env:GITHUB_TOKEN)@github.com/$repoFull.git"
-          $path = Join-Path $PWD "fresh_repo"
-
-          if (Test-Path $path) {
-            Write-Host "==> Removing existing 'fresh_repo' directory"
-            Remove-Item -Recurse -Force $path
+          $name = "${{ env.REPO_NAME }}"
+          if (docker ps -a -q -f name=$name) {
+            Write-Host "Stopping and removing container '$name'..."
+            docker rm -f $name
+          } else {
+            Write-Host "No container '$name' found."
           }
 
-          New-Item -ItemType Directory -Path $path | Out-Null
-          Set-Location $path
-          
-          git clone --depth 1 --branch $branch $url .
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "❌ git clone failed with exit code $LASTEXITCODE"
-            exit $LASTEXITCODE
+      - name: Remove old image
+        shell: powershell
+        run: |
+          $name = "${{ env.REPO_NAME }}"
+          $ids  = docker images -q $name
+          if ($ids) {
+            Write-Host "Removing images: $ids"
+            $ids | ForEach-Object { docker rmi -f $_ }
+          } else {
+            Write-Host "No images named '$name' found."
           }
-
-          echo "::set-output name=repo-path::fresh_repo"
 
   build:
-    needs: clone
+    name: Checkout code and build image
     runs-on: [self-hosted, windows]
-    env:
-      REPO_NAME: ${{ github.event.repository.name }}
+    needs: cleanup
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
       - name: Build Docker image
         shell: powershell
         run: |
-          $repoPath = "${{ needs.clone.outputs.repo-path }}"
-          $imageName = "$($env:REPO_NAME):latest"
-          Write-Host "==> Building Docker image: $imageName"
-          docker build -t $imageName $repoPath
+          $repo = "${{ env.REPO_NAME }}"
+          Write-Host "Building image '${repo}:latest'..."
+          docker build -t "${repo}:latest" .
 
   deploy:
-    needs: build
+    name: Run container and verify
     runs-on: [self-hosted, windows]
-    env:
-      BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-      REPO_NAME: ${{ github.event.repository.name }}
+    needs: build
     steps:
-      - name: Stop and remove existing container
+      - name: Start new container
         shell: powershell
         run: |
-          Write-Host "==> Removing existing container: $env:REPO_NAME (if any)"
-          try {
-            docker rm -f $env:REPO_NAME
-          } catch {
-            Write-Host "No existing container to remove."
-          }
+          $repo = "${{ env.REPO_NAME }}"
+          Write-Host "Starting container '$repo' from image '${repo}:latest'..."
+          docker run -d --name $repo -e BOT_TOKEN="${{ secrets.BOT_TOKEN }}" "${repo}:latest"
 
-      - name: Run container and verify
+      - name: Verify container is running
         shell: powershell
         run: |
-          $imageName = "$($env:REPO_NAME):latest"
-          Write-Host "==> Starting container: $env:REPO_NAME with image $imageName"
-          $cid = docker run -d --name $env:REPO_NAME `
-            -e BOT_TOKEN="$env:BOT_TOKEN" `
-            $imageName
-          Write-Host "✅ Container started with ID: $cid"
-
-          Write-Host "==> Verifying container state for: $env:REPO_NAME"
-          $status = docker inspect -f '{{.State.Running}}' $env:REPO_NAME
-          if ($status.Trim() -eq 'true') {
-            Write-Host "✅ Verification passed: container is running"
+          $name  = "${{ env.REPO_NAME }}"
+          Start-Sleep -Seconds 5
+          $state = (docker inspect -f '{{.State.Status}}' $name).Trim()
+          if ($state -eq 'running') {
+            Write-Host "Container '$name' is running."
           } else {
-            Write-Error "❌ Verification failed: container is NOT running (status=$status)"
+            Write-Error "Container '$name' state is '$state'. Failing."
             exit 1
           }
