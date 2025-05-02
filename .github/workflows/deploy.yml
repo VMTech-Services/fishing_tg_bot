@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  REPO_NAME: turbo_repost_bot
+  REPO_NAME: fishing_tg_bot
 
 jobs:
   cleanup:
