@@ -203,5 +203,35 @@
         "name": "Книга по математике",
         "rarity": 1,
         "description": "Вызывает неприятные воспоминания"
+    },
+    {
+        "name": "The Monster",
+        "rarity": 3,
+        "description": "Ух какие зубки!~ (from Iron Lung)"
+    },
+    {
+        "name": "Странный сыр",
+        "rarity": 1,
+        "description": "Почему в нём есть широкая прорезь?"
+    },
+    {
+        "name": "V1",
+        "rarity": 3,
+        "description": "Мало того, что рыба с одним глазом и ярко голубого цвета, так ещё и если потрясти - изнутри можно услышать звон монет! (from ULTRAKILL)"
+    },
+    {
+        "name": "V2",
+        "rarity": 3,
+        "description": "Rebuild WHAT?! (from ULTRAKILL)"
+    },
+    {
+        "name": "Ерундук",
+        "rarity": 0,
+        "description": "Бурундук, только несёт полную ерунду"
+    },
+    {
+        "name": "Белый Monster",
+        "rarity": 2,
+        "description": "С розовой юбкой и чулками в комплекте"
     }
 ]
