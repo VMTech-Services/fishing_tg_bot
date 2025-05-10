@@ -288,5 +288,10 @@
         "name": "Joker 🃏",
         "rarity": 8,
         "description": "\"There is no laws against pokemon Batman, i can do whatever i want!\""
+    },
+    {
+        "name": "Кубическая пчела",
+        "rarity": 4,
+        "description": "Жалко в попке, у пчёлки чёрно-жёлтой (from Minecraft)"
     }
 ]
