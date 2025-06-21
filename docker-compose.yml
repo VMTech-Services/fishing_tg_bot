@@ -1,7 +1,8 @@
 services:
   app:
+    image: ghcr.io/vmtech-services/fishing_tg_bot:latest
     build:
       context: .
-    environment:
-      BOT_TOKEN: ${BOT_TOKEN}
     restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
