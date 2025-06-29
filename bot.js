@@ -1,6 +1,8 @@
 require('dotenv').config();
 const { Telegraf } = require('telegraf');
 
+const botver = 3
+
 const lootData = require('./loot.json');
 const rarity = require('./lootQuality.json')
 const texts = require('./texts.json')
@@ -151,7 +153,7 @@ bot.on('inline_query', async (ctx) => {
     }
 
     stringArray.push("")
-    stringArray.push("`fishygame_bot-v2`")
+    stringArray.push(`\`fishygame_bot-v${botver}\``)
 
     ctx.answerInlineQuery([{
         type: 'article',
